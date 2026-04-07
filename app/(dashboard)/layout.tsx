@@ -2,6 +2,9 @@ import { HeaderBar } from "@/components/header-bar";
 import { Sidebar } from "@/components/sidebar";
 import { loadNavTrees } from "@/lib/nav-data";
 
+/** DB-backed layout; must not prerender at build time (no DATABASE_URL in Docker build). */
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
   children,
 }: {
