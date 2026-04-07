@@ -1,6 +1,7 @@
 "use client";
 
 import type {
+  BlockColumn,
   Bullet,
   ChecklistItem,
   ContentBlock,
@@ -20,7 +21,13 @@ import {
 export type BlockPayload = ContentBlock & {
   bullets: Bullet[];
   items: ChecklistItem[];
+  columns: BlockColumn[];
 };
+
+function sortedColumns(b: BlockPayload): BlockColumn[] {
+  if (b.type !== "COLUMNS") return [];
+  return [...b.columns].sort((a, c) => a.columnIndex - c.columnIndex);
+}
 
 function toSaveInput(blocks: BlockPayload[]): SaveBlockInput[] {
   return blocks.map((b) => {
@@ -31,12 +38,22 @@ function toSaveInput(blocks: BlockPayload[]): SaveBlockInput[] {
         bullets: b.bullets.map((x) => x.text),
       };
     }
+    if (b.type === "CHECKLIST") {
+      return {
+        type: "CHECKLIST",
+        title: b.title,
+        items: b.items.map((i) => ({
+          label: i.label,
+          checked: i.checked,
+        })),
+      };
+    }
     return {
-      type: "CHECKLIST",
+      type: "COLUMNS",
       title: b.title,
-      items: b.items.map((i) => ({
-        label: i.label,
-        checked: i.checked,
+      columns: sortedColumns(b).map((c) => ({
+        heading: c.heading,
+        lines: c.body.split("\n"),
       })),
     };
   });
@@ -60,7 +77,14 @@ export function PageEditor({
 
   useEffect(() => {
     setTitle(page.title);
-    setBlocks(page.blocks);
+    setBlocks(
+      page.blocks.map((b) => ({
+        ...b,
+        bullets: b.bullets ?? [],
+        items: b.items ?? [],
+        columns: b.columns ?? [],
+      })),
+    );
     setDirty(false);
     setSaveHint("idle");
   }, [page.id, page.updatedAt]);
@@ -181,7 +205,70 @@ export function PageEditor({
     markDirty();
   }
 
-  function onAddBlock(kind: "CATEGORY" | "CHECKLIST") {
+  function updateColumnsBlock(
+    index: number,
+    patch: Partial<Pick<ContentBlock, "title">>,
+  ) {
+    setBlocks((prev) => {
+      const copy = [...prev];
+      const b = { ...copy[index] };
+      if (patch.title !== undefined) b.title = patch.title;
+      copy[index] = b;
+      return copy;
+    });
+    markDirty();
+  }
+
+  function updateColumnField(
+    blockIndex: number,
+    colIdx: number,
+    field: "heading" | "body",
+    value: string,
+  ) {
+    setBlocks((prev) => {
+      const copy = [...prev];
+      const b = copy[blockIndex];
+      if (b.type !== "COLUMNS") return prev;
+      const cols = sortedColumns(b).map((c) => ({ ...c }));
+      const col = { ...cols[colIdx] };
+      if (field === "heading") col.heading = value.trim() ? value : null;
+      else col.body = value;
+      cols[colIdx] = col;
+      copy[blockIndex] = {
+        ...b,
+        columns: cols.map((c, idx) => ({ ...c, columnIndex: idx })),
+      };
+      return copy;
+    });
+    markDirty();
+  }
+
+  function setColumnCount(blockIndex: number, count: 2 | 3) {
+    setBlocks((prev) => {
+      const copy = [...prev];
+      const b = copy[blockIndex];
+      if (b.type !== "COLUMNS") return prev;
+      let cols = sortedColumns(b).map((c) => ({ ...c }));
+      if (count === 2 && cols.length > 2) cols = cols.slice(0, 2);
+      if (count === 3 && cols.length === 2) {
+        cols.push({
+          id: `tmp-col-${Date.now()}`,
+          blockId: b.id,
+          columnIndex: 2,
+          heading: null,
+          body: "",
+        });
+      }
+      copy[blockIndex] = {
+        ...b,
+        columns: cols.map((c, idx) => ({ ...c, columnIndex: idx })),
+      };
+      return copy;
+    });
+    markDirty();
+  }
+
+  function onAddBlock(kind: "CATEGORY" | "CHECKLIST" | "COLUMNS") {
     startTransition(async () => {
       await persistDraft({ revalidate: false });
       await addBlock(page.id, kind);
@@ -209,7 +296,7 @@ export function PageEditor({
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-6xl">
       <div className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <label className="sr-only" htmlFor="page-title">
@@ -263,13 +350,21 @@ export function PageEditor({
         >
           + Checklist block
         </button>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/50"
+          onClick={() => onAddBlock("COLUMNS")}
+          disabled={pending}
+        >
+          + Column block (2–3 columns)
+        </button>
       </div>
 
       <div className="space-y-5">
         {blocks.length === 0 && (
           <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center text-sm text-slate-500">
-            Add a category or checklist block to start this section of your
-            report.
+            Add a category, column layout, or checklist block to start this
+            section of your report.
           </p>
         )}
         {blocks.map((b, i) => (
@@ -279,7 +374,11 @@ export function PageEditor({
           >
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {b.type === "CATEGORY" ? "Category" : "Checklist"}
+                {b.type === "CATEGORY"
+                  ? "Category"
+                  : b.type === "CHECKLIST"
+                    ? "Checklist"
+                    : "Columns"}
               </span>
               <div className="flex gap-1">
                 <button
@@ -309,11 +408,13 @@ export function PageEditor({
               className="mb-3 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
               placeholder="Heading (optional)"
               value={b.title ?? ""}
-              onChange={(e) =>
-                b.type === "CATEGORY"
-                  ? updateCategory(i, { title: e.target.value || null })
-                  : updateChecklist(i, { title: e.target.value || null })
-              }
+              onChange={(e) => {
+                const v = e.target.value || null;
+                if (b.type === "CATEGORY") updateCategory(i, { title: v });
+                else if (b.type === "CHECKLIST")
+                  updateChecklist(i, { title: v });
+                else updateColumnsBlock(i, { title: v });
+              }}
             />
             {b.type === "CATEGORY" && (
               <textarea
@@ -395,6 +496,56 @@ export function PageEditor({
                   </button>
                 </li>
               </ul>
+            )}
+            {b.type === "COLUMNS" && (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                    <span className="font-medium">Layout</span>
+                    <select
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm"
+                      value={sortedColumns(b).length}
+                      onChange={(e) =>
+                        setColumnCount(i, Number(e.target.value) as 2 | 3)
+                      }
+                    >
+                      <option value={2}>2 columns</option>
+                      <option value={3}>3 columns</option>
+                    </select>
+                  </label>
+                  <span className="text-xs text-slate-400">
+                    One bullet per line in each column. Optional column headings
+                    below.
+                  </span>
+                </div>
+                <div
+                  className={`grid gap-4 ${sortedColumns(b).length === 3 ? "grid-cols-3" : "grid-cols-2"}`}
+                >
+                  {sortedColumns(b).map((col, ci) => (
+                    <div
+                      key={col.id}
+                      className="flex min-h-0 flex-col rounded-lg border border-slate-100 bg-slate-50/80 p-3"
+                    >
+                      <input
+                        className="mb-2 w-full rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700 placeholder:text-slate-400"
+                        placeholder={`Column ${ci + 1} heading (optional)`}
+                        value={col.heading ?? ""}
+                        onChange={(e) =>
+                          updateColumnField(i, ci, "heading", e.target.value)
+                        }
+                      />
+                      <textarea
+                        className="min-h-[160px] w-full flex-1 resize-y rounded-md border border-slate-200 bg-white px-2.5 py-2 text-sm leading-relaxed text-slate-800 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                        placeholder="One bullet per line"
+                        value={col.body}
+                        onChange={(e) =>
+                          updateColumnField(i, ci, "body", e.target.value)
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         ))}

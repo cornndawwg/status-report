@@ -20,6 +20,7 @@ export default async function EditPage({
         include: {
           bullets: { orderBy: { sortOrder: "asc" } },
           items: { orderBy: { sortOrder: "asc" } },
+          columns: { orderBy: { columnIndex: "asc" } },
         },
       },
     },

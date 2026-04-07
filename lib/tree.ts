@@ -1,4 +1,5 @@
 import type {
+  BlockColumn,
   Bullet,
   ChecklistItem,
   ContentBlock,
@@ -6,7 +7,11 @@ import type {
 } from "@prisma/client";
 
 export type PageWithBlocks = Page & {
-  blocks: (ContentBlock & { bullets: Bullet[]; items: ChecklistItem[] })[];
+  blocks: (ContentBlock & {
+    bullets: Bullet[];
+    items: ChecklistItem[];
+    columns: BlockColumn[];
+  })[];
 };
 
 export type TreeNode<T extends Page> = T & { children: TreeNode<T>[] };

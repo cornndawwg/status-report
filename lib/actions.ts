@@ -77,6 +77,11 @@ export type SaveBlockInput =
       type: "CHECKLIST";
       title: string | null;
       items: { label: string; checked: boolean }[];
+    }
+  | {
+      type: "COLUMNS";
+      title: string | null;
+      columns: { heading: string | null; lines: string[] }[];
     };
 
 export async function savePageBlocks(
@@ -106,7 +111,7 @@ export async function savePageBlocks(
             data: { blockId: block.id, text: lines[j], sortOrder: j },
           });
         }
-      } else {
+      } else if (b.type === "CHECKLIST") {
         const block = await tx.contentBlock.create({
           data: {
             pageId,
@@ -126,6 +131,26 @@ export async function savePageBlocks(
             },
           });
         }
+      } else {
+        const block = await tx.contentBlock.create({
+          data: {
+            pageId,
+            type: "COLUMNS",
+            title: b.title,
+            sortOrder: i,
+          },
+        });
+        for (let k = 0; k < b.columns.length; k++) {
+          const col = b.columns[k];
+          await tx.blockColumn.create({
+            data: {
+              blockId: block.id,
+              columnIndex: k,
+              heading: col.heading,
+              body: col.lines.join("\n"),
+            },
+          });
+        }
       }
     }
   });
@@ -135,7 +160,10 @@ export async function savePageBlocks(
   }
 }
 
-export async function addBlock(pageId: string, kind: "CATEGORY" | "CHECKLIST") {
+export async function addBlock(
+  pageId: string,
+  kind: "CATEGORY" | "CHECKLIST" | "COLUMNS",
+) {
   const page = await prisma.page.findUnique({
     where: { id: pageId },
     include: { blocks: true },
@@ -152,7 +180,7 @@ export async function addBlock(pageId: string, kind: "CATEGORY" | "CHECKLIST") {
         bullets: { create: [{ text: "", sortOrder: 0 }] },
       },
     });
-  } else {
+  } else if (kind === "CHECKLIST") {
     await prisma.contentBlock.create({
       data: {
         pageId,
@@ -161,6 +189,21 @@ export async function addBlock(pageId: string, kind: "CATEGORY" | "CHECKLIST") {
         sortOrder: nextOrder,
         items: {
           create: [{ label: "Item", checked: false, sortOrder: 0 }],
+        },
+      },
+    });
+  } else {
+    await prisma.contentBlock.create({
+      data: {
+        pageId,
+        type: "COLUMNS",
+        title: "Columns",
+        sortOrder: nextOrder,
+        columns: {
+          create: [
+            { columnIndex: 0, heading: null, body: "" },
+            { columnIndex: 1, heading: null, body: "" },
+          ],
         },
       },
     });

@@ -55,6 +55,21 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
   },
+  columnRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 6,
+  },
+  columnCell: {
+    flex: 1,
+    minWidth: 0,
+  },
+  columnHeading: {
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    marginBottom: 4,
+    color: "#333",
+  },
 });
 
 export function ReportPdfDocument({
@@ -96,7 +111,7 @@ export function ReportPdfDocument({
                         </Text>
                       ))}
                   </View>
-                ) : (
+                ) : b.type === "CHECKLIST" ? (
                   <View key={bi} wrap={false}>
                     {b.title ? (
                       <Text style={styles.categoryTitle}>{b.title}</Text>
@@ -109,6 +124,31 @@ export function ReportPdfDocument({
                         <Text style={{ flex: 1 }}>{it.label}</Text>
                       </View>
                     ))}
+                  </View>
+                ) : (
+                  <View key={bi} wrap={false}>
+                    {b.title ? (
+                      <Text style={styles.categoryTitle}>{b.title}</Text>
+                    ) : null}
+                    <View style={styles.columnRow}>
+                      {b.columns.map((col, ci) => (
+                        <View key={ci} style={styles.columnCell} wrap={false}>
+                          {col.heading ? (
+                            <Text style={styles.columnHeading}>
+                              {col.heading}
+                            </Text>
+                          ) : null}
+                          {col.lines
+                            .map((l) => l.trim())
+                            .filter((l) => l.length > 0)
+                            .map((line, li) => (
+                              <Text key={li} style={styles.bullet}>
+                                • {line}
+                              </Text>
+                            ))}
+                        </View>
+                      ))}
+                    </View>
                   </View>
                 ),
               )}

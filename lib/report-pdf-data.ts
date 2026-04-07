@@ -13,6 +13,11 @@ export type PdfBlock =
       type: "CHECKLIST";
       title: string | null;
       items: { label: string; checked: boolean }[];
+    }
+  | {
+      type: "COLUMNS";
+      title: string | null;
+      columns: { heading: string | null; lines: string[] }[];
     };
 
 export type PdfPage = { title: string; blocks: PdfBlock[] };
@@ -31,6 +36,7 @@ export async function getFullReportForPdf(): Promise<PdfSection[]> {
           include: {
             bullets: { orderBy: { sortOrder: "asc" } },
             items: { orderBy: { sortOrder: "asc" } },
+            columns: { orderBy: { columnIndex: "asc" } },
           },
         },
       },
@@ -47,12 +53,22 @@ export async function getFullReportForPdf(): Promise<PdfSection[]> {
             bullets: b.bullets.map((x) => x.text),
           };
         }
+        if (b.type === "CHECKLIST") {
+          return {
+            type: "CHECKLIST" as const,
+            title: b.title,
+            items: b.items.map((i) => ({
+              label: i.label,
+              checked: i.checked,
+            })),
+          };
+        }
         return {
-          type: "CHECKLIST" as const,
+          type: "COLUMNS" as const,
           title: b.title,
-          items: b.items.map((i) => ({
-            label: i.label,
-            checked: i.checked,
+          columns: b.columns.map((c) => ({
+            heading: c.heading,
+            lines: c.body.split("\n"),
           })),
         };
       }),

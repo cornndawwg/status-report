@@ -16,6 +16,7 @@ enum Section {
 enum BlockType {
   CATEGORY
   CHECKLIST
+  COLUMNS
 }
 
 model Page {
@@ -43,8 +44,20 @@ model ContentBlock {
   sortOrder Int       @default(0)
   bullets   Bullet[]
   items     ChecklistItem[]
+  columns   BlockColumn[]
 
   @@index([pageId])
+}
+
+model BlockColumn {
+  id          String       @id @default(cuid())
+  blockId     String
+  block       ContentBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  columnIndex Int
+  heading     String?
+  body        String       @default("")
+  @@unique([blockId, columnIndex])
+  @@index([blockId])
 }
 
 model Bullet {
