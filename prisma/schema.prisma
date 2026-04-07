@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Section {
+  MARKETING
+  SALESFORCE
+  ADDITIONAL_PROJECTS
+}
+
+enum BlockType {
+  CATEGORY
+  CHECKLIST
+}
+
+model Page {
+  id        String   @id @default(cuid())
+  section   Section
+  parentId  String?
+  parent    Page?    @relation("PageTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Page[]   @relation("PageTree")
+  title     String
+  slug      String
+  sortOrder Int      @default(0)
+  blocks    ContentBlock[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([section, parentId])
+}
+
+model ContentBlock {
+  id        String    @id @default(cuid())
+  pageId    String
+  page      Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  type      BlockType
+  title     String?
+  sortOrder Int       @default(0)
+  bullets   Bullet[]
+  items     ChecklistItem[]
+
+  @@index([pageId])
+}
+
+model Bullet {
+  id        String       @id @default(cuid())
+  blockId   String
+  block     ContentBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  text      String       @default("")
+  sortOrder Int          @default(0)
+}
+
+model ChecklistItem {
+  id        String       @id @default(cuid())
+  blockId   String
+  block     ContentBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  label     String
+  checked   Boolean      @default(false)
+  sortOrder Int          @default(0)
+}
