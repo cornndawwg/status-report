@@ -49,7 +49,9 @@ Next.js app for weekly status reports: three sections (Marketing, Salesforce, Ad
 1. Create a **PostgreSQL** plugin and set `DATABASE_URL` on the web service.
 2. Set `AUTH_SECRET`, `AUTH_EMAIL`, `AUTH_PASSWORD_HASH`, and `NEXTAUTH_URL` (your public HTTPS URL).
 3. **Build**: `npm run build` (or use the included `Dockerfile`).
-4. **Release / start**: run migrations before or at startup, e.g. `npx prisma migrate deploy && node server.js` for the standalone output (see `Dockerfile`).
+4. **Start / migrations**: do **not** rely on `npx prisma` in minimal or standalone images (the `prisma` binary is often missing from `PATH`). Use:
+   - `npm run migrate:deploy && npm start`, or
+   - the **`Dockerfile`** default command (runs migrations via `node ./node_modules/prisma/build/index.js`, then `node server.js`).
 
 ## Docker image
 
