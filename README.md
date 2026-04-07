@@ -36,6 +36,19 @@ Next.js app for weekly status reports: three sections (Marketing, Salesforce, Ad
    npm run db:seed
    ```
 
+### Seed production (Railway) from your laptop
+
+You do **not** need Railway SSH or `railway run`. Use the **public** Postgres URL from Railway (Postgres plugin → **Connect** / **Variables** → external `DATABASE_URL`).
+
+From this repo, after `npm install`:
+
+```bash
+npx prisma generate
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require" npm run db:seed
+```
+
+Use the exact URL Railway gives you (often includes `sslmode=require`). Run **once** per empty database.
+
 4. **Run**
 
    ```bash
@@ -52,6 +65,8 @@ Next.js app for weekly status reports: three sections (Marketing, Salesforce, Ad
 4. **Start / migrations**: do **not** rely on `npx prisma` in minimal or standalone images (the `prisma` binary is often missing from `PATH`). Use:
    - `npm run migrate:deploy && npm start`, or
    - the **`Dockerfile`** default command (runs migrations via `node ./node_modules/prisma/build/index.js`, then `node server.js`).
+5. **Do not set `PORT` yourself** in Railway variables unless you know you need to. Railway injects `PORT` automatically; the app listens on that port. A wrong `PORT` (e.g. forcing `3000` when the platform expects another) can cause **502** responses.
+6. **502 Bad Gateway**: usually the container exited or never listened. Check **Deploy logs** (not only Build logs) for `migrate deploy` or Node errors. Confirm `DATABASE_URL` on the **web** service points at Postgres (reference the plugin’s variable). After deploy, `GET /api/health` should return `{"ok":true}` without logging in.
 
 ## Docker image
 

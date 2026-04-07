@@ -38,8 +38,9 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 3000
-ENV PORT=3000
+# Railway injects PORT at runtime — do not hardcode PORT here or the app may listen on the wrong port → 502
 ENV HOSTNAME=0.0.0.0
 
 # Full node_modules makes `node node_modules/prisma/build/index.js` resolve effect, c12, …
-CMD ["sh", "-c", "node ./node_modules/prisma/build/index.js migrate deploy && node server.js"]
+# `exec` so Node is PID 1 and receives signals; migrate failures exit non‑zero (visible in deploy logs)
+CMD ["sh", "-c", "node ./node_modules/prisma/build/index.js migrate deploy && exec node server.js"]

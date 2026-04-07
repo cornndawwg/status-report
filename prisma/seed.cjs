@@ -1,8 +1,8 @@
-import { PrismaClient, Section } from "@prisma/client";
+const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-const ROOTS: { section: Section; title: string; slug: string }[] = [
+const ROOTS = [
   { section: "MARKETING", title: "Marketing Status Report", slug: "marketing-root" },
   { section: "SALESFORCE", title: "Salesforce Status Report", slug: "salesforce-root" },
   {
