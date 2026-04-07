@@ -7,6 +7,7 @@
     "build": "prisma generate && next build",
     "start": "node .next/standalone/server.js",
     "migrate:deploy": "node ./node_modules/prisma/build/index.js migrate deploy",
+    "start:railway": "node ./node_modules/prisma/build/index.js migrate deploy && node server.js",
     "start:prod": "npm run migrate:deploy && next start",
     "lint": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",

@@ -42,5 +42,5 @@ EXPOSE 3000
 ENV HOSTNAME=0.0.0.0
 
 # Full node_modules makes `node node_modules/prisma/build/index.js` resolve effect, c12, …
-# `exec` so Node is PID 1 and receives signals; migrate failures exit non‑zero (visible in deploy logs)
+# Must run the HTTP server after migrate — see `start:railway` in package.json (Railway custom command must match)
 CMD ["sh", "-c", "node ./node_modules/prisma/build/index.js migrate deploy && exec node server.js"]

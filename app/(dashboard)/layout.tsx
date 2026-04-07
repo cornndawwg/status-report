@@ -12,11 +12,11 @@ export default async function DashboardLayout({
 }) {
   const trees = await loadNavTrees();
   return (
-    <div className="flex min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="flex min-h-screen">
       <Sidebar trees={trees} />
-      <div className="flex min-h-screen flex-1 flex-col pt-14 md:pt-0">
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col border-l border-slate-200/80 bg-white shadow-sm">
         <HeaderBar />
-        <main className="flex-1 px-4 py-6 md:px-8">{children}</main>
+        <main className="flex-1 px-8 py-8 pb-16">{children}</main>
       </div>
     </div>
   );

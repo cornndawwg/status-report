@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Section } from "@prisma/client";
 import type { PageNode } from "@/lib/tree";
 import { SECTION_LABEL, SECTION_ORDER, sectionToSlug } from "@/lib/sections";
@@ -12,18 +12,18 @@ function NavBranch({
   section,
   depth,
   currentPageId,
-  onNavigate,
 }: {
   nodes: PageNode[];
   section: Section;
   depth: number;
   currentPageId: string;
-  onNavigate?: () => void;
 }) {
   return (
     <ul
       className={
-        depth === 0 ? "space-y-0.5" : "ml-3 mt-0.5 space-y-0.5 border-l border-zinc-700 pl-2"
+        depth === 0
+          ? "space-y-0.5"
+          : "ml-2 mt-0.5 space-y-0.5 border-l border-slate-200 pl-3"
       }
     >
       {nodes.map((n) => {
@@ -33,11 +33,10 @@ function NavBranch({
           <li key={n.id}>
             <Link
               href={href}
-              onClick={onNavigate}
-              className={`block rounded px-2 py-1 text-sm ${
+              className={`block rounded-md py-1.5 pl-2 pr-2 text-sm leading-snug transition ${
                 active
-                  ? "bg-zinc-700 font-medium text-white"
-                  : "text-zinc-300 hover:bg-zinc-800 hover:text-white"
+                  ? "border-l-[3px] border-blue-600 bg-blue-50 font-medium text-slate-900"
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               }`}
             >
               {n.title}
@@ -48,7 +47,6 @@ function NavBranch({
                 section={section}
                 depth={depth + 1}
                 currentPageId={currentPageId}
-                onNavigate={onNavigate}
               />
             )}
           </li>
@@ -62,73 +60,57 @@ export function Sidebar({ trees }: { trees: Record<Section, PageNode[]> }) {
   const pathname = usePathname();
   const currentPageId = pathname.match(/\/page\/([^/]+)/)?.[1] ?? "";
   const [sectionOpen, setSectionOpen] = useState<Record<Section, boolean>>(
-    () => Object.fromEntries(SECTION_ORDER.map((s) => [s, true])) as Record<Section, boolean>,
+    () =>
+      Object.fromEntries(SECTION_ORDER.map((s) => [s, true])) as Record<
+        Section,
+        boolean
+      >,
   );
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
 
   return (
-    <>
-      <button
-        type="button"
-        className="fixed left-3 top-3 z-40 rounded-md border border-zinc-600 bg-zinc-900 px-3 py-2 text-sm text-zinc-100 shadow md:hidden"
-        onClick={() => setMobileOpen((v) => !v)}
-        aria-expanded={mobileOpen}
-        aria-label="Toggle navigation"
-      >
-        Menu
-      </button>
-      {mobileOpen && (
-        <button
-          type="button"
-          className="fixed inset-0 z-20 bg-black/50 md:hidden"
-          aria-label="Close menu"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-      <aside
-        className={`fixed inset-y-0 left-0 z-30 w-72 max-w-[85vw] overflow-y-auto border-r border-zinc-800 bg-zinc-950 px-3 py-4 pt-14 transition-transform md:static md:z-0 md:flex md:w-64 md:max-w-none md:translate-x-0 md:flex-col md:pt-4 ${
-          mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-        }`}
-      >
-        <div className="mb-4 hidden text-xs font-semibold uppercase tracking-wide text-zinc-500 md:block">
-          Status report
-        </div>
-        <nav className="space-y-1">
-          {SECTION_ORDER.map((section) => {
-            const expanded = sectionOpen[section];
-            return (
-              <div key={section} className="rounded-lg bg-zinc-900/50">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between px-2 py-2 text-left text-sm font-medium text-zinc-100"
-                  onClick={() =>
-                    setSectionOpen((o) => ({ ...o, [section]: !o[section] }))
-                  }
-                >
-                  <span>{SECTION_LABEL[section]}</span>
-                  <span className="text-zinc-500">{expanded ? "−" : "+"}</span>
-                </button>
-                {expanded && (
-                  <div className="pb-2">
-                    <NavBranch
-                      nodes={trees[section]}
-                      section={section}
-                      depth={0}
-                      currentPageId={currentPageId}
-                      onNavigate={() => setMobileOpen(false)}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-      </aside>
-      <div className="hidden md:block md:w-64 md:shrink-0" aria-hidden />
-    </>
+    <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-slate-50/90 px-4 py-6">
+      <div className="mb-6">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          Report
+        </p>
+        <p className="mt-0.5 text-sm font-semibold text-slate-800">
+          Status updates
+        </p>
+      </div>
+      <nav className="flex-1 space-y-2">
+        {SECTION_ORDER.map((section) => {
+          const expanded = sectionOpen[section];
+          return (
+            <div
+              key={section}
+              className="overflow-hidden rounded-lg border border-slate-200/90 bg-white shadow-sm"
+            >
+              <button
+                type="button"
+                className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                onClick={() =>
+                  setSectionOpen((o) => ({ ...o, [section]: !o[section] }))
+                }
+              >
+                <span>{SECTION_LABEL[section]}</span>
+                <span className="text-xs text-slate-400" aria-hidden>
+                  {expanded ? "−" : "+"}
+                </span>
+              </button>
+              {expanded && (
+                <div className="border-t border-slate-100 px-2 pb-2 pt-1">
+                  <NavBranch
+                    nodes={trees[section]}
+                    section={section}
+                    depth={0}
+                    currentPageId={currentPageId}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+    </aside>
   );
 }

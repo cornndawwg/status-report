@@ -68,6 +68,10 @@ Use the exact URL Railway gives you (often includes `sslmode=require`). Run **on
 5. **Do not set `PORT` yourself** in Railway variables unless you know you need to. Railway injects `PORT` automatically; the app listens on that port. A wrong `PORT` (e.g. forcing `3000` when the platform expects another) can cause **502** responses.
 6. **502 Bad Gateway**: usually the container exited or never listened. Check **Deploy logs** (not only Build logs) for `migrate deploy` or Node errors. Confirm `DATABASE_URL` on the **web** service points at Postgres (reference the plugin’s variable). After deploy, `GET /api/health` should return `{"ok":true}` without logging in.
 
+7. **Custom Start Command on Railway** — If you set this to **only** `npm run migrate:deploy`, migrations run and then **nothing starts the web server** (502, logs stop right after Prisma). Either:
+   - **Clear** the custom start command so the **Dockerfile** `CMD` runs (migrate + `node server.js`), or
+   - Set it to: `npm run start:railway` (runs migrate **and** `node server.js` in the standalone layout).
+
 ## Docker image
 
 ```bash

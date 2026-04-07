@@ -35,13 +35,18 @@ export async function createChildPage(
   redirect(pagePath(section, page.id));
 }
 
-export async function updatePageTitle(pageId: string, title: string) {
+export async function updatePageTitle(
+  pageId: string,
+  title: string,
+  options?: { revalidate?: boolean },
+) {
   const trimmed = title.trim();
   if (!trimmed) throw new Error("Title required");
   const page = await prisma.page.update({
     where: { id: pageId },
     data: { title: trimmed },
   });
+  if (options?.revalidate === false) return;
   revalidatePath("/");
   revalidatePath(`/section/${sectionToSlug(page.section)}`, "layout");
   revalidatePath(pagePath(page.section, pageId));
@@ -74,7 +79,11 @@ export type SaveBlockInput =
       items: { label: string; checked: boolean }[];
     };
 
-export async function savePageBlocks(pageId: string, blocks: SaveBlockInput[]) {
+export async function savePageBlocks(
+  pageId: string,
+  blocks: SaveBlockInput[],
+  options?: { revalidate?: boolean },
+) {
   const page = await prisma.page.findUnique({ where: { id: pageId } });
   if (!page) throw new Error("Page not found");
 
@@ -121,7 +130,9 @@ export async function savePageBlocks(pageId: string, blocks: SaveBlockInput[]) {
     }
   });
 
-  revalidatePath(pagePath(page.section, pageId));
+  if (options?.revalidate !== false) {
+    revalidatePath(pagePath(page.section, pageId));
+  }
 }
 
 export async function addBlock(pageId: string, kind: "CATEGORY" | "CHECKLIST") {

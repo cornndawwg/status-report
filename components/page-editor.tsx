@@ -7,7 +7,7 @@ import type {
   Page,
 } from "@prisma/client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   addBlock,
   createChildPage,
@@ -52,30 +52,73 @@ export function PageEditor({
   const [childTitle, setChildTitle] = useState("");
   const [blocks, setBlocks] = useState<BlockPayload[]>(page.blocks);
   const [pending, startTransition] = useTransition();
+  const [dirty, setDirty] = useState(false);
+  const [saveHint, setSaveHint] = useState<"idle" | "saving" | "saved">(
+    "idle",
+  );
+  const saveHintClear = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setTitle(page.title);
     setBlocks(page.blocks);
+    setDirty(false);
+    setSaveHint("idle");
   }, [page.id, page.updatedAt]);
+
+  /** Persist blocks + title. Use `revalidate: false` for background saves so the page doesn’t refresh while you type. */
+  async function persistDraft(opts?: { revalidate?: boolean }): Promise<void> {
+    const r = opts?.revalidate ?? true;
+    await savePageBlocks(page.id, toSaveInput(blocks), { revalidate: r });
+    const t = title.trim();
+    if (t && t !== page.title) {
+      await updatePageTitle(page.id, t, { revalidate: r });
+    }
+  }
+
+  /** Autosave a few seconds after you stop editing */
+  useEffect(() => {
+    if (!dirty) return;
+    const id = setTimeout(() => {
+      startTransition(async () => {
+        setSaveHint("saving");
+        try {
+          await persistDraft({ revalidate: false });
+          setSaveHint("saved");
+          setDirty(false);
+          if (saveHintClear.current) clearTimeout(saveHintClear.current);
+          saveHintClear.current = setTimeout(() => setSaveHint("idle"), 2500);
+        } catch {
+          setSaveHint("idle");
+        }
+      });
+    }, 2200);
+    return () => clearTimeout(id);
+  }, [dirty, blocks, title, page.id, page.title]);
 
   function save() {
     startTransition(async () => {
-      await savePageBlocks(page.id, toSaveInput(blocks));
+      setSaveHint("saving");
+      await persistDraft();
+      setSaveHint("saved");
+      setDirty(false);
       router.refresh();
+      if (saveHintClear.current) clearTimeout(saveHintClear.current);
+      saveHintClear.current = setTimeout(() => setSaveHint("idle"), 2500);
     });
   }
 
-  function onTitleBlur() {
-    const t = title.trim();
-    if (!t || t === page.title) return;
-    startTransition(async () => {
-      await updatePageTitle(page.id, t);
-      router.refresh();
-    });
+  function markDirty() {
+    setDirty(true);
+  }
+
+  function onTitleChange(v: string) {
+    setTitle(v);
+    markDirty();
   }
 
   function removeBlockAt(index: number) {
     setBlocks((prev) => prev.filter((_, i) => i !== index));
+    markDirty();
   }
 
   function moveBlock(index: number, dir: -1 | 1) {
@@ -86,6 +129,7 @@ export function PageEditor({
       [next[index], next[j]] = [next[j], next[index]];
       return next;
     });
+    markDirty();
   }
 
   function updateCategory(
@@ -108,6 +152,7 @@ export function PageEditor({
       copy[index] = b;
       return copy;
     });
+    markDirty();
   }
 
   function updateChecklist(
@@ -133,89 +178,127 @@ export function PageEditor({
       copy[index] = b;
       return copy;
     });
+    markDirty();
   }
 
-  async function onAddBlock(kind: "CATEGORY" | "CHECKLIST") {
-    await addBlock(page.id, kind);
-    router.refresh();
+  function onAddBlock(kind: "CATEGORY" | "CHECKLIST") {
+    startTransition(async () => {
+      await persistDraft({ revalidate: false });
+      await addBlock(page.id, kind);
+      setDirty(false);
+      router.refresh();
+    });
   }
 
-  async function onCreateChild(e: React.FormEvent) {
+  function onCreateChild(e: React.FormEvent) {
     e.preventDefault();
     const t = childTitle.trim();
     if (!t) return;
-    await createChildPage(page.section, page.id, t);
+    startTransition(async () => {
+      await persistDraft();
+      await createChildPage(page.section, page.id, t);
+    });
   }
 
-  async function onDeletePage() {
+  function onDeletePage() {
     if (!confirm("Delete this page and all sub-pages?")) return;
-    await deletePage(page.id);
+    startTransition(async () => {
+      await persistDraft();
+      await deletePage(page.id);
+    });
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <input
-          className="w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 text-xl font-semibold text-white"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          onBlur={onTitleBlur}
-        />
+    <div className="mx-auto max-w-3xl">
+      <div className="mb-8 flex flex-col gap-4 border-b border-slate-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <label className="sr-only" htmlFor="page-title">
+            Page title
+          </label>
+          <input
+            id="page-title"
+            className="w-full border-0 border-b-2 border-transparent bg-transparent pb-1 text-2xl font-semibold tracking-tight text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-0"
+            value={title}
+            onChange={(e) => onTitleChange(e.target.value)}
+            placeholder="Page title"
+          />
+          <p className="mt-2 text-sm text-slate-500">
+            Changes save automatically after you pause typing, or use Save now.
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2 sm:pt-1">
+          {saveHint === "saving" && (
+            <span className="text-xs text-slate-500">Saving…</span>
+          )}
+          {saveHint === "saved" && (
+            <span className="text-xs font-medium text-emerald-600">
+              All changes saved
+            </span>
+          )}
+          <button
+            type="button"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:opacity-50"
+            onClick={save}
+            disabled={pending}
+          >
+            {pending ? "Saving…" : "Save now"}
+          </button>
+        </div>
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2">
         <button
           type="button"
-          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-          onClick={save}
+          className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/50"
+          onClick={() => onAddBlock("CATEGORY")}
           disabled={pending}
         >
-          {pending ? "Saving…" : "Save content"}
-        </button>
-      </div>
-
-      <div className="flex flex-wrap gap-2 text-sm">
-        <button
-          type="button"
-          className="rounded border border-zinc-600 px-3 py-1.5 hover:bg-zinc-800"
-          onClick={() => onAddBlock("CATEGORY")}
-        >
-          + Category
+          + Category block
         </button>
         <button
           type="button"
-          className="rounded border border-zinc-600 px-3 py-1.5 hover:bg-zinc-800"
+          className="rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/50"
           onClick={() => onAddBlock("CHECKLIST")}
+          disabled={pending}
         >
-          + Checklist
+          + Checklist block
         </button>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-5">
+        {blocks.length === 0 && (
+          <p className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50 px-4 py-8 text-center text-sm text-slate-500">
+            Add a category or checklist block to start this section of your
+            report.
+          </p>
+        )}
         {blocks.map((b, i) => (
           <div
             key={b.id}
-            className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4"
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
           >
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs uppercase text-zinc-500">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
                 {b.type === "CATEGORY" ? "Category" : "Checklist"}
               </span>
               <div className="flex gap-1">
                 <button
                   type="button"
-                  className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800"
+                  className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
                   onClick={() => moveBlock(i, -1)}
                 >
                   Up
                 </button>
                 <button
                   type="button"
-                  className="rounded px-2 py-0.5 text-xs text-zinc-400 hover:bg-zinc-800"
+                  className="rounded px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-100"
                   onClick={() => moveBlock(i, 1)}
                 >
                   Down
                 </button>
                 <button
                   type="button"
-                  className="rounded px-2 py-0.5 text-xs text-red-400 hover:bg-red-950"
+                  className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
                   onClick={() => removeBlockAt(i)}
                 >
                   Remove
@@ -223,7 +306,7 @@ export function PageEditor({
               </div>
             </div>
             <input
-              className="mb-2 w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm"
+              className="mb-3 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-400"
               placeholder="Heading (optional)"
               value={b.title ?? ""}
               onChange={(e) =>
@@ -234,7 +317,7 @@ export function PageEditor({
             />
             {b.type === "CATEGORY" && (
               <textarea
-                className="min-h-[120px] w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-2 font-mono text-sm"
+                className="min-h-[140px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm leading-relaxed text-slate-800 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                 placeholder="One bullet per line"
                 value={b.bullets.map((x) => x.text).join("\n")}
                 onChange={(e) =>
@@ -250,7 +333,7 @@ export function PageEditor({
                   <li key={item.id} className="flex items-start gap-2">
                     <input
                       type="checkbox"
-                      className="mt-1"
+                      className="mt-1.5 size-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       checked={item.checked}
                       onChange={(e) => {
                         const items = b.items.map((it, k) =>
@@ -262,7 +345,7 @@ export function PageEditor({
                       }}
                     />
                     <input
-                      className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-sm"
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
                       value={item.label}
                       onChange={(e) => {
                         const items = b.items.map((it, k) =>
@@ -275,7 +358,7 @@ export function PageEditor({
                     />
                     <button
                       type="button"
-                      className="text-xs text-red-400"
+                      className="px-1 text-sm text-slate-400 hover:text-red-600"
                       onClick={() =>
                         updateChecklist(i, {
                           items: b.items
@@ -286,6 +369,7 @@ export function PageEditor({
                             })),
                         })
                       }
+                      aria-label="Remove row"
                     >
                       ×
                     </button>
@@ -294,7 +378,7 @@ export function PageEditor({
                 <li>
                   <button
                     type="button"
-                    className="text-sm text-emerald-400 hover:underline"
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800"
                     onClick={() =>
                       updateChecklist(i, {
                         items: [
@@ -316,28 +400,38 @@ export function PageEditor({
         ))}
       </div>
 
-      <section className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4">
-        <h3 className="mb-2 text-sm font-medium text-zinc-300">Sub-page</h3>
-        <form onSubmit={onCreateChild} className="flex flex-col gap-2 sm:flex-row">
+      <section className="mt-10 rounded-xl border border-slate-200 bg-slate-50/50 p-5">
+        <h3 className="mb-1 text-sm font-semibold text-slate-800">
+          Nested page
+        </h3>
+        <p className="mb-3 text-sm text-slate-500">
+          For a large initiative (e.g. its own status area), add a sub-page under
+          this one.
+        </p>
+        <form
+          onSubmit={onCreateChild}
+          className="flex flex-col gap-2 sm:flex-row"
+        >
           <input
-            className="flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm"
-            placeholder="New nested page title"
+            className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+            placeholder="Sub-page title"
             value={childTitle}
             onChange={(e) => setChildTitle(e.target.value)}
           />
           <button
             type="submit"
-            className="rounded bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-900"
+            className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
+            disabled={pending}
           >
-            Add page under this one
+            Add sub-page
           </button>
         </form>
       </section>
 
-      <div className="border-t border-zinc-800 pt-4">
+      <div className="mt-10 border-t border-slate-200 pt-6">
         <button
           type="button"
-          className="text-sm text-red-400 hover:underline"
+          className="text-sm text-red-600 hover:underline"
           onClick={onDeletePage}
         >
           Delete this page…
